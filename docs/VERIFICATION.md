@@ -35,3 +35,5 @@ A real Claude GUI session has not been exercised. Static-header clients are the 
 - Generated local VAULT_KEY and PostgreSQL password checked against staged source: absent; `.env` is ignored.
 
 These checks establish the Milestone 1 verification flow. The synthetic GitHub OAuth callback test also proves one code exchange followed by two separately authorized SDK clients reusing the same stored connection, with state/session binding and replay rejection. This still does not establish the live-provider Milestone 2 acceptance gate.
+
+Independent visual fix-list review: **ship within reviewed scope** after mobile theme access, selected-navigation contrast and stable production captures were corrected. Evidence covers populated Overview on desktop/mobile in light/dark. This is not an accessibility, security or whole-product certification. Design tokens and component previews are recorded in DESIGN.md and `.impeccable/design.json`.
