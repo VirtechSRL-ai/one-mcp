@@ -1,0 +1,11 @@
+FROM node:22-alpine
+WORKDIR /app
+COPY package*.json ./
+COPY apps/dashboard/package.json apps/dashboard/package.json
+RUN npm ci
+COPY apps/api apps/api
+COPY packages packages
+COPY infrastructure infrastructure
+COPY tsconfig.json ./
+USER node
+CMD ["sh", "-c", "npm run migrate && npm start"]

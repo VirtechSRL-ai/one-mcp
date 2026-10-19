@@ -1,0 +1,15 @@
+# Self-hosting
+
+Generate `.env` with `npm run setup`; `docker compose up -d --build` starts PostgreSQL, the API and dashboard. Migrations use a transaction, schema version and PostgreSQL advisory lock; startup fails if a migration fails. They never silently reset data. Database/API are not publicly exposed by Compose; dashboard binds to loopback. The API is accessible only inside the Compose network.
+
+For remote use, put an HTTPS ingress in front of dashboard port 3000, set the exact `PUBLIC_URL`, preserve its Host header and allow request/response streaming at `/mcp`. API Origin validation and the dashboard proxy reject mismatched hosts; do not disable these checks. Configure ingress body/rate/time limits, and use a stable deployment hostname. The preview has process-local rate limits and one API replica; multi-replica deployment needs shared limits and a refresh coordination review.
+
+Set `REGISTRATION_ENABLED=false` after creating intended users. This version has no email verification, invitation system, password reset, MFA or OIDC. Do not treat it as a hardened public SaaS. Browser sessions expire after seven days, client keys after 90 days. Setting a different vault key without a credential migration breaks decryption. KMS-backed keys and online key rotation are future work.
+
+Back up the named PostgreSQL volume using pg_dump and store VAULT_KEY separately in your secret manager. Verify restoration in an isolated environment. No credentials are exported through `/api/export`. Audit retention defaults to 30 days (`AUDIT_RETENTION_DAYS`); hourly cleanup removes expired sessions/state and expires pending approvals. Activity records contain identifiers, status and timing, not tool inputs/results. Pending approval arguments are encrypted and retained until their owning data is removed; automatic approval-record retention is future work.
+
+Approvals are claimed atomically before execution and cannot be replayed. A crash after sending a remote write can leave an unknown outcome; startup marks interrupted approvals `failed_indeterminate` and never retries automatically. Check the provider before submitting a fresh operation. This is at-most-one ONE execution attempt, not a guarantee of exactly-once delivery by every upstream service.
+
+External MCP is opt-in. Public HTTPS/443 only, DNS checks at socket connection, redirects disabled, no ambient proxy, no stdio. Do not put credentials in endpoint URLs. Tools are conservative write-classified and require review. A remote tool can still be malicious; only trust servers you control or have assessed. External OAuth and proactive availability monitoring are not implemented.
+
+Untrusted external schemas are bounded (64 KB, 1,000 nodes, depth 20). References, regex patterns and branching/conditional schema combinators are rejected; format validation is disabled. This conservative preview subset intentionally rejects some legitimate servers until stronger isolation is available.

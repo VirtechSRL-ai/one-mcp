@@ -1,0 +1,48 @@
+name: Verify
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: one
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: one_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U one -d one_test"
+          --health-interval 5s --health-timeout 3s --health-retries 15
+    env:
+      DATABASE_URL: postgres://one:synthetic-ci-only@localhost:5432/one_test
+      VAULT_KEY: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      PUBLIC_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: npm}
+      - run: npm ci
+      - run: npm run migrate
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          npm start > /tmp/one-api.log 2>&1 &
+          npm run start -w @one/dashboard > /tmp/one-web.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:3000 > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-evidence
+          path: |
+            test-results/
+            .impeccable/review/

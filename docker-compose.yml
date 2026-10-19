@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: one
+      POSTGRES_DB: one
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run npm run setup first}
+    ports: ["127.0.0.1:5439:5432"]
+    volumes: ["one-db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U one -d one"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/Dockerfile.api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://one:${POSTGRES_PASSWORD}@db:5432/one
+      PORT: 4000
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('node:http').get('http://127.0.0.1:4000/health',{headers:{host:new URL(process.env.PUBLIC_URL).host}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  dashboard:
+    build:
+      context: .
+      dockerfile: infrastructure/Dockerfile.dashboard
+    environment:
+      API_INTERNAL_URL: http://api:4000
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+volumes:
+  one-db:

@@ -1,0 +1,43 @@
+{
+  "name": "one-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "apps/dashboard"
+  ],
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --import tsx --watch apps/api/src/index.ts",
+    "dev:dashboard": "npm run dev -w @one/dashboard",
+    "start": "node --env-file-if-exists=.env --import tsx apps/api/src/index.ts",
+    "migrate": "node --env-file-if-exists=.env --import tsx apps/api/src/migrate.ts",
+    "typecheck": "tsc --noEmit && npm run typecheck -w @one/dashboard",
+    "test": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run",
+    "test:e2e": "playwright test",
+    "build": "npm run build -w @one/dashboard",
+    "check": "npm run typecheck && npm test && npm run build",
+    "setup": "node scripts/setup.mjs"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "ajv": "^8.20.0",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.6.1",
+    "pg": "^8.16.3",
+    "undici": "^7.16.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.6",
+    "prettier": "^3.9.10",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}
