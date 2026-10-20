@@ -1,3 +1,8 @@
+import {
+  ClientOAuthProvider,
+  machineOAuthPath,
+  oauthPath,
+} from "./client-oauth.js";
 import { assertExternalSchema } from "../../../packages/core/src/external-schema.js";
 import Fastify, { type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
@@ -73,9 +78,16 @@ export async function buildApp(service: Service) {
               : "request_failed",
     });
   });
+  const clientOAuth = new ClientOAuthProvider(service);
+  const oauthRouter = clientOAuth.router();
   app.addHook("onRequest", async (req, reply) => {
     if (req.headers.host !== base.host) throw new AppError(403, "invalid_host");
-    if (req.headers.origin && req.headers.origin !== base.origin)
+    if (
+      req.url.split("?")[0] !== "/mcp" &&
+      !machineOAuthPath(req.url.split("?")[0]) &&
+      req.headers.origin &&
+      req.headers.origin !== base.origin
+    )
       throw new AppError(403, "invalid_origin");
     if (
       req.url.startsWith("/api/") &&
@@ -83,7 +95,37 @@ export async function buildApp(service: Service) {
       req.headers.origin !== base.origin
     )
       throw new AppError(403, "origin_required");
+    if (req.url.split("?")[0] === "/mcp" && req.headers.origin) {
+      reply.header("Access-Control-Allow-Origin", req.headers.origin);
+      reply.header("Vary", "Origin");
+      reply.header(
+        "Access-Control-Expose-Headers",
+        "WWW-Authenticate, MCP-Session-Id, MCP-Protocol-Version",
+      );
+      if (req.method === "OPTIONS") {
+        reply.header(
+          "Access-Control-Allow-Methods",
+          "GET, POST, DELETE, OPTIONS",
+        );
+        reply.header(
+          "Access-Control-Allow-Headers",
+          "Authorization, Content-Type, Accept, MCP-Protocol-Version, MCP-Session-Id, Last-Event-ID",
+        );
+        return reply.code(204).send();
+      }
+    }
     reply.header("Cache-Control", "no-store");
+  });
+  app.addHook("onRequest", async (req, reply) => {
+    if (!oauthPath(req.url.split("?")[0])) return;
+    for (const [key, value] of Object.entries(reply.getHeaders()))
+      if (value !== undefined) reply.raw.setHeader(key, value);
+    reply.hijack();
+    await new Promise<void>((resolve) => {
+      reply.raw.once("finish", resolve);
+      reply.raw.once("close", resolve);
+      oauthRouter(req.raw, reply.raw);
+    });
   });
   const user = async (req: FastifyRequest) =>
     service.browser(req.cookies.one_session || "");
@@ -101,6 +143,43 @@ export async function buildApp(service: Service) {
       maxAge: 604800,
     });
   };
+  app.get("/api/client-oauth/requests/:id", async (req) =>
+    clientOAuth.review(
+      uuid.parse((req.params as any).id),
+      await user(req),
+      req.cookies.one_session || "",
+      req.cookies.one_oauth_flow || "",
+    ),
+  );
+  app.post("/api/client-oauth/requests/:id", async (req, reply) => {
+    const v = z
+      .object({
+        approve: z.boolean(),
+        grants: z
+          .array(
+            z
+              .object({
+                connectionId: uuid,
+                tool: z.string().min(1).max(200),
+                approval: z.boolean().default(false),
+              })
+              .strict(),
+          )
+          .max(200),
+      })
+      .strict()
+      .parse(req.body);
+    const result = await clientOAuth.consent(
+      uuid.parse((req.params as any).id),
+      await user(req),
+      req.cookies.one_session || "",
+      req.cookies.one_oauth_flow || "",
+      v.approve,
+      v.grants,
+    );
+    reply.clearCookie("one_oauth_flow", { path: "/" });
+    return result;
+  });
   app.get("/health", async () => {
     await query("SELECT 1");
     return { status: "ok", version: "0.1.0" };
@@ -301,7 +380,7 @@ export async function buildApp(service: Service) {
   });
   app.get("/api/clients", async (req) =>
     query(
-      "SELECT id,name,expires_at,revoked_at,created_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC",
+      "SELECT id,name,auth_mode,oauth_application_id,expires_at,revoked_at,created_at FROM clients WHERE user_id=$1 ORDER BY created_at DESC",
       [await user(req)],
     ),
   );
@@ -499,9 +578,21 @@ export async function buildApp(service: Service) {
         throw new AppError(401, "bearer_required");
       p = await service.principal(auth.slice(7));
     } catch {
-      reply.header("WWW-Authenticate", 'Bearer realm="one-mcp"');
+      reply.header(
+        "WWW-Authenticate",
+        `Bearer resource_metadata="${service.base}/.well-known/oauth-protected-resource/mcp", scope="one:mcp"`,
+      );
       throw new AppError(401, "invalid_client_token");
     }
+    if (req.headers.origin && req.headers.origin !== base.origin) {
+      const [authorization] = await query(
+        "SELECT oauth_origin FROM clients WHERE id=$1 AND user_id=$2",
+        [p.clientId, p.userId],
+      );
+      if (authorization?.oauth_origin !== req.headers.origin)
+        throw new AppError(403, "invalid_origin");
+    }
+
     const server = new McpServer({ name: "one", version: "0.1.0" });
     const wrap = (fn: () => Promise<unknown>) =>
       fn()
@@ -562,6 +653,8 @@ export async function buildApp(service: Service) {
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
+    for (const [key, value] of Object.entries(reply.getHeaders()))
+      if (value !== undefined) reply.raw.setHeader(key, value);
     reply.hijack();
     reply.raw.on("close", () => {
       void transport.close();

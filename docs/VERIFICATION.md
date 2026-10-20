@@ -22,7 +22,7 @@
 
 ## Remaining acceptance
 
-A real Claude GUI session has not been exercised. Static-header clients are the supported bootstrap mode, not full OAuth-based MCP enrollment. Provider-side app registration, Google verification and target-domain TLS are external prerequisites. The 12-step master scenario with real GitHub and Google remains **not passed** until those prerequisites and explicit live evidence exist.
+A real Claude GUI session has not been exercised. OAuth-based MCP enrollment is now implemented (2026-10-20 extension below); installed Claude/Cursor/Codex product interoperability is still a separate check. Provider-side app registration, Google verification and target-domain TLS are external prerequisites. The 12-step master scenario with real GitHub and Google remains **not passed** until those prerequisites and explicit live evidence exist.
 
 ## Recorded final local checks
 
@@ -37,3 +37,13 @@ A real Claude GUI session has not been exercised. Static-header clients are the 
 These checks establish the Milestone 1 verification flow. The synthetic GitHub OAuth callback test also proves one code exchange followed by two separately authorized SDK clients reusing the same stored connection, with state/session binding and replay rejection. This still does not establish the live-provider Milestone 2 acceptance gate.
 
 Independent visual fix-list review: **ship within reviewed scope** after mobile theme access, selected-navigation contrast and stable production captures were corrected. Evidence covers populated Overview on desktop/mobile in light/dark. This is not an accessibility, security or whole-product certification. Design tokens and component previews are recorded in DESIGN.md and `.impeccable/design.json`.
+
+## Downstream OAuth extension — 2026-10-20
+
+Implemented with official SDK OAuth handlers, persisted application registration and explicit browser consent: RFC 9728/8414 metadata, S256, DCR, restricted public CIMD, exact resource and redirect binding, short-lived access tokens, refresh rotation, family replay revocation, RFC 7009 and individually revocable user authorizations. Consent has an HttpOnly browser binding plus authenticated session/Origin checks; tool grants start empty. Migration versions 2 through 4 preserve existing users, manual keys and upstream accounts.
+
+Initial extension checks: 68 PostgreSQL/security/HTTP tests and four browser scenarios passed locally, including URL-only official SDK enrollment from desktop/mobile, explicit per-account grant, automatic refresh, two clients reusing one verification connection, and independent revocation. Real Google/GitHub remain **not tested**: both provider application configurations were absent when checked. `npm run providers:status` reports this without values; `npm run verify:live` is the operator's real-account acceptance harness described in LIVE-ACCEPTANCE.md. `--check` verifies discovery only.
+
+The initial release's 48-test record above is historical. Final extension checks/remote CI are recorded separately below.
+
+Final local extension checks: **69 tests passed** in five files; **4 Playwright scenarios passed** against the rebuilt production Docker deployment (desktop/mobile baseline and URL-only OAuth). TypeScript, Next production builds, controlled schema migrations, OAuth-discovery CLI check and dependency audit passed. The independent visual reviewer returned **ship within the changed consent-flow scope**, using desktop/mobile light/dark captures. Design documentation review confirmed reuse of the existing system; pre-existing detector advisories were left untouched. Remote PR CI is reported separately, not inferred from these local results.

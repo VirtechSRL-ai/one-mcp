@@ -19,6 +19,15 @@ const cleanup = async () => {
   await query("DELETE FROM sessions WHERE expires_at<now()");
   await query("DELETE FROM oauth_states WHERE expires_at<now()");
   await query(
+    "DELETE FROM oauth_authorization_requests WHERE expires_at<now()-interval '1 day'",
+  );
+  await query(
+    "DELETE FROM oauth_codes WHERE expires_at<now()-interval '1 day'",
+  );
+  await query(
+    "DELETE FROM oauth_tokens WHERE expires_at<now()-interval '1 day'",
+  );
+  await query(
     "UPDATE approvals SET state='expired' WHERE state='pending' AND expires_at<now()",
   );
 };

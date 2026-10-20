@@ -38,6 +38,7 @@ jobs:
             if curl -fsS http://localhost:3000 > /dev/null; then break; fi
             sleep 1
           done
+          npm run verify:live -- --check
           npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: always()
