@@ -31,16 +31,34 @@ export class Service {
     key: string,
     oauth?: OAuthEngine,
   ) {
+    const publicUrl = new URL(base);
+    if (
+      !["https:", "http:"].includes(publicUrl.protocol) ||
+      publicUrl.username ||
+      publicUrl.password ||
+      publicUrl.search ||
+      publicUrl.hash ||
+      publicUrl.pathname !== "/"
+    )
+      throw new Error(
+        "PUBLIC_URL must be an origin without credentials, query, fragment or path",
+      );
+    this.base = publicUrl.origin;
     this.vault = new Vault(key);
-    this.oauth = oauth || new DirectOAuthEngine(base);
+    this.oauth = oauth || new DirectOAuthEngine(this.base);
   }
   async principal(value: string): Promise<Principal> {
     const [c] = await query(
-      "SELECT id,user_id FROM clients WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now()",
+      "SELECT id,user_id FROM clients WHERE token_hash=$1 AND auth_mode='manual' AND revoked_at IS NULL AND expires_at>now()",
       [hash(value)],
     );
-    if (!c) throw new AppError(401, "invalid_client_token");
-    return { userId: c.user_id, clientId: c.id };
+    if (c) return { userId: c.user_id, clientId: c.id };
+    const [oauth] = await query(
+      "SELECT c.id,c.user_id FROM oauth_tokens t JOIN clients c ON c.id=t.client_id JOIN oauth_token_families f ON f.id=t.family_id WHERE f.revoked_at IS NULL AND t.hash=$1 AND t.kind='access' AND t.resource=$2 AND 'one:mcp'=ANY(t.scopes) AND t.revoked_at IS NULL AND t.expires_at>now() AND c.revoked_at IS NULL AND c.expires_at>now()",
+      [hash(value), new URL("/mcp", this.base).href],
+    );
+    if (!oauth) throw new AppError(401, "invalid_client_token");
+    return { userId: oauth.user_id, clientId: oauth.id };
   }
   async browser(value: string) {
     const [s] = await query(

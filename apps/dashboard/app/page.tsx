@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
+import { api } from "./lib/api";
+import { OAuthConsent } from "./components/oauth-consent";
 type Row = Record<string, any>;
 const pages = [
   "Overview",
@@ -11,16 +13,6 @@ const pages = [
   "Approvals",
   "Settings",
 ];
-async function api(path: string, method = "GET", data?: unknown) {
-  const r = await fetch(`/api${path}`, {
-    method,
-    headers: method === "GET" ? {} : { "Content-Type": "application/json" },
-    body: method === "GET" ? undefined : JSON.stringify(data ?? {}),
-  });
-  const v = await r.json();
-  if (!r.ok) throw new Error(v.error?.replaceAll("_", " ") || "Request failed");
-  return v;
-}
 function Mark() {
   return (
     <svg
@@ -58,6 +50,7 @@ export default function Dashboard() {
     [issued, setIssued] = useState<Row | null>(null),
     [search, setSearch] = useState(""),
     [review, setReview] = useState<Row | null>(null);
+  const [oauthRequest, setOAuthRequest] = useState<string | null>(null);
   async function load() {
     const m = await api("/me");
     setMe(m);
@@ -81,6 +74,11 @@ export default function Dashboard() {
     setProviders(p);
   }
   useEffect(() => {
+    const requestId = new URLSearchParams(location.search).get("oauth_request");
+    if (requestId && /^[0-9a-f-]{36}$/i.test(requestId)) {
+      setOAuthRequest(requestId);
+      setRegister(false);
+    }
     const q = new URLSearchParams(location.search).get("view");
     if (q && pages.includes(q)) setView(q);
     load()
@@ -144,6 +142,8 @@ export default function Dashboard() {
         Opening your connection layer…
       </main>
     );
+  if (me && oauthRequest)
+    return <OAuthConsent requestId={oauthRequest} email={me.email} />;
   if (!me)
     return (
       <main className="auth">
@@ -555,6 +555,37 @@ export default function Dashboard() {
           )}
           {view === "AI Clients" && (
             <>
+              <section>
+                <h2>Connect with your MCP URL</h2>
+                <p>
+                  Paste this URL into an OAuth-capable MCP client. Sign in to
+                  ONE and choose the tools it can use. The client manages its
+                  credentials automatically.
+                </p>
+                <div className="endpoint">
+                  <code>{me.endpoint}</code>
+                  <button
+                    className="secondary"
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(me.endpoint)
+                        .then(() => setNotice("Endpoint copied."))
+                        .catch(() => setError("Copy the endpoint manually"));
+                    }}
+                  >
+                    Copy MCP URL
+                  </button>
+                </div>
+                <p className="muted">
+                  Remote applications need a reachable HTTPS instance. A
+                  localhost URL works only for clients on this computer. OAuth
+                  and manual clients are individually revocable below.
+                </p>
+              </section>
+              <h2>Advanced: manual client key</h2>
+              <p>
+                For clients that only support a static authorization header.
+              </p>
               <form
                 className="inline-form"
                 onSubmit={(e) => {
@@ -617,6 +648,9 @@ export default function Dashboard() {
                         <div>
                           <h2>{c.name}</h2>
                           <small>
+                            {c.auth_mode === "oauth"
+                              ? "OAuth · "
+                              : "Manual key · "}
                             Expires{" "}
                             {new Date(c.expires_at).toLocaleDateString()}
                           </small>
